@@ -127,20 +127,6 @@ static void createMenuBar(void)
                 keyEquivalent:@""] setSubmenu:servicesMenu];
     [servicesMenu release];
     [appMenu addItem:[NSMenuItem separatorItem]];
-    [appMenu addItemWithTitle:[NSString stringWithFormat:@"Hide %@", appName]
-                       action:@selector(hide:)
-                keyEquivalent:@"h"];
-    [[appMenu addItemWithTitle:@"Hide Others"
-                       action:@selector(hideOtherApplications:)
-                keyEquivalent:@"h"]
-        setKeyEquivalentModifierMask:NSEventModifierFlagOption | NSEventModifierFlagCommand];
-    [appMenu addItemWithTitle:@"Show All"
-                       action:@selector(unhideAllApplications:)
-                keyEquivalent:@""];
-    [appMenu addItem:[NSMenuItem separatorItem]];
-    [appMenu addItemWithTitle:[NSString stringWithFormat:@"Quit %@", appName]
-                       action:@selector(terminate:)
-                keyEquivalent:@"q"];
 
     NSMenuItem* windowMenuItem =
         [bar addItemWithTitle:@"" action:NULL keyEquivalent:@""];
@@ -149,9 +135,6 @@ static void createMenuBar(void)
     [NSApp setWindowsMenu:windowMenu];
     [windowMenuItem setSubmenu:windowMenu];
 
-    [windowMenu addItemWithTitle:@"Minimize"
-                          action:@selector(performMiniaturize:)
-                   keyEquivalent:@"m"];
     [windowMenu addItemWithTitle:@"Zoom"
                           action:@selector(performZoom:)
                    keyEquivalent:@""];
@@ -159,13 +142,6 @@ static void createMenuBar(void)
     [windowMenu addItemWithTitle:@"Bring All to Front"
                           action:@selector(arrangeInFront:)
                    keyEquivalent:@""];
-
-    // TODO: Make this appear at the bottom of the menu (for consistency)
-    [windowMenu addItem:[NSMenuItem separatorItem]];
-    [[windowMenu addItemWithTitle:@"Enter Full Screen"
-                           action:@selector(toggleFullScreen:)
-                    keyEquivalent:@"f"]
-     setKeyEquivalentModifierMask:NSEventModifierFlagControl | NSEventModifierFlagCommand];
 
     // Prior to Snow Leopard, we need to use this oddly-named semi-private API
     // to get the application menu working properly.
@@ -450,6 +426,49 @@ static GLFWbool initializeTIS(void)
 
 @end // GLFWApplicationDelegate
 
+@interface CustomApplication : NSApplication
+@end
+
+@implementation CustomApplication
+
+- (void)sendEvent:(NSEvent *)event
+{
+    static BOOL isReposting = NO; // Flag to prevent loops
+
+    if ([event type] == NSEventTypeKeyDown)
+    {
+        // Block fn+ctrl+up/down since we want to use them
+        NSEventModifierFlags modifiers = [event modifierFlags];
+        if ((modifiers & NSEventModifierFlagFunction) && (modifiers & NSEventModifierFlagControl) &&
+            ([event keyCode] == 116 || [event keyCode] == 121))
+        {
+            if (isReposting)
+            {
+                isReposting = NO;
+            }
+            else
+            {
+                NSEvent* glfwEvent = [NSEvent keyEventWithType:[event type]
+                                                      location:[event locationInWindow]
+                                                 modifierFlags:[event modifierFlags]
+                                                     timestamp:[event timestamp]
+                                                  windowNumber:[event windowNumber]
+                                                       context:[event context]
+                                                    characters:[event characters]
+                                   charactersIgnoringModifiers:[event charactersIgnoringModifiers]
+                                                     isARepeat:[event isARepeat]
+                                                       keyCode:[event keyCode]];
+
+                isReposting = YES;
+                [NSApp postEvent:glfwEvent atStart:NO];
+                return;
+            }
+        }
+    }
+    [super sendEvent:event];
+}
+
+@end
 
 //////////////////////////////////////////////////////////////////////////
 //////                       GLFW internal API                      //////
@@ -581,7 +600,7 @@ int _glfwInitCocoa(void)
                              toTarget:_glfw.ns.helper
                            withObject:nil];
 
-    [NSApplication sharedApplication];
+    [CustomApplication sharedApplication];
 
     _glfw.ns.delegate = [[GLFWApplicationDelegate alloc] init];
     if (_glfw.ns.delegate == nil)
